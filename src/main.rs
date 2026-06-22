@@ -6,6 +6,9 @@ use std::{
     time::Duration,
 };
 
+mod display_persistence;
+use display_persistence::{default_config_path, start_sway_output_persistence};
+
 mod watcher;
 use watcher::input::{send_initial_input_events, start_input_watcher};
 mod event;
@@ -33,6 +36,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let session = get_current_session();
     println!("You are currently running: {:?}", session);
+
+    let _display_persistence = if matches!(session, identifier::Desktop::Sway) {
+        Some(start_sway_output_persistence(default_config_path()?))
+    } else {
+        None
+    };
 
     let compositor = init_compositor(session);
     if compositor.is_none() {
