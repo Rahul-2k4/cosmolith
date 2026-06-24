@@ -1,16 +1,20 @@
 use std::{
     env, fs,
     io::{self, Write},
+    os::unix::fs::{OpenOptionsExt, PermissionsExt},
     path::{Path, PathBuf},
     thread::{self, JoinHandle},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use swayipc::{Connection, Event, EventType};
 
+const MAX_RECONNECT_DELAY: Duration = Duration::from_secs(16);
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct OutputSnapshot {
     pub name: String,
+    pub active: bool,
     pub mode: Option<(i32, i32, i32)>,
     pub position: (i32, i32),
     pub scale: Option<f64>,
@@ -18,13 +22,6 @@ pub struct OutputSnapshot {
 }
 
 pub fn render_outputs(outputs: &[OutputSnapshot]) -> io::Result<String> {
-    if outputs.is_empty() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "refusing to persist an empty Sway output state",
-        ));
-    }
-
     let mut outputs = outputs.to_vec();
     outputs.sort_by(|left, right| left.name.cmp(&right.name));
 
@@ -35,6 +32,10 @@ pub fn render_outputs(outputs: &[OutputSnapshot]) -> io::Result<String> {
     for output in outputs {
         rendered.push_str("output \"");
         rendered.push_str(&escape_sway_string(&output.name));
+        if !output.active {
+            rendered.push_str("\" disable\n");
+            continue;
+        }
         rendered.push_str("\" enable");
         if let Some((width, height, refresh_millihz)) = output.mode
             && width > 0
@@ -63,21 +64,34 @@ pub fn render_outputs(outputs: &[OutputSnapshot]) -> io::Result<String> {
 }
 
 pub fn persist_outputs(path: &Path, outputs: &[OutputSnapshot]) -> io::Result<()> {
+    if outputs.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "refusing to persist an empty Sway output topology",
+        ));
+    }
+
     let rendered = render_outputs(outputs)?;
     let parent = path.parent().ok_or_else(|| {
         io::Error::new(io::ErrorKind::InvalidInput, "output config has no parent")
     })?;
     fs::create_dir_all(parent)?;
 
+    let mode = fs::metadata(path)
+        .map(|metadata| metadata.permissions().mode() & 0o666)
+        .unwrap_or(0o600);
     let temporary = temporary_path(path);
     let result = (|| {
         let mut file = fs::OpenOptions::new()
             .write(true)
             .create_new(true)
+            .mode(0o600)
             .open(&temporary)?;
+        file.set_permissions(fs::Permissions::from_mode(mode))?;
         file.write_all(rendered.as_bytes())?;
         file.sync_all()?;
-        fs::rename(&temporary, path)
+        fs::rename(&temporary, path)?;
+        fs::File::open(parent)?.sync_all()
     })();
     if result.is_err() {
         let _ = fs::remove_file(&temporary);
@@ -86,50 +100,79 @@ pub fn persist_outputs(path: &Path, outputs: &[OutputSnapshot]) -> io::Result<()
 }
 
 pub fn default_config_path() -> io::Result<PathBuf> {
-    let home = env::var_os("HOME")
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "HOME is not set"))?;
-    Ok(PathBuf::from(home).join(".config/regolith3/sway/config.d/90_cosmic_outputs.conf"))
+    config_path(env::var_os("XDG_CONFIG_HOME"), env::var_os("HOME"))
+}
+
+pub fn config_path(
+    xdg_config_home: Option<std::ffi::OsString>,
+    home: Option<std::ffi::OsString>,
+) -> io::Result<PathBuf> {
+    let config = xdg_config_home
+        .map(PathBuf::from)
+        .or_else(|| home.map(|home| PathBuf::from(home).join(".config")))
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                "neither XDG_CONFIG_HOME nor HOME is set",
+            )
+        })?;
+    Ok(config.join("regolith3/sway/config.d/90_cosmic_outputs.conf"))
 }
 
 pub fn start_sway_output_persistence(path: PathBuf) -> JoinHandle<()> {
     thread::spawn(move || {
-        let connection = match Connection::new() {
-            Ok(connection) => connection,
-            Err(error) => {
-                eprintln!("Failed to connect to Sway output events: {error}");
-                return;
-            }
-        };
-        let events = match connection.subscribe([EventType::Output]) {
-            Ok(events) => events,
-            Err(error) => {
-                eprintln!("Failed to subscribe to Sway output events: {error}");
-                return;
-            }
-        };
-        snapshot_on_start_and_output_events(
-            events.map(|event| {
-                event
-                    .map(|event| matches!(event, Event::Output(_)))
-                    .map_err(|error| error.to_string())
-            }),
-            || snapshot_to_path(&path),
+        retry_subscriber(
+            Duration::from_secs(1),
+            || run_subscription(&path),
+            thread::sleep,
         );
     })
 }
 
-fn snapshot_on_start_and_output_events<I, F>(events: I, mut snapshot: F)
-where
-    I: IntoIterator<Item = Result<bool, String>>,
-    F: FnMut(),
-{
-    snapshot();
+fn run_subscription(path: &Path) -> Result<(), String> {
+    let connection = match Connection::new() {
+        Ok(connection) => connection,
+        Err(error) => {
+            return Err(format!("failed to connect to Sway output events: {error}"));
+        }
+    };
+    let events = match connection.subscribe([EventType::Output]) {
+        Ok(events) => events,
+        Err(error) => {
+            return Err(format!(
+                "failed to subscribe to Sway output events: {error}"
+            ));
+        }
+    };
+    snapshot_to_path(path);
     for event in events {
         match event {
-            Ok(true) => snapshot(),
-            Ok(false) => {}
-            Err(error) => eprintln!("Failed to read Sway output event: {error}"),
+            Ok(Event::Output(_)) => snapshot_to_path(path),
+            Ok(_) => {}
+            Err(error) => return Err(format!("failed to read Sway output event: {error}")),
         }
+    }
+    Err("Sway output event stream ended".into())
+}
+
+fn retry_subscriber<R, S>(base_delay: Duration, mut run: R, mut sleep: S)
+where
+    R: FnMut() -> Result<(), String>,
+    S: FnMut(Duration),
+{
+    let mut failures = 0u32;
+    loop {
+        match run() {
+            Ok(()) => return,
+            Err(error) => eprintln!("Sway output subscriber restarting: {error}"),
+        }
+        let multiplier = 1u32.checked_shl(failures.min(4)).unwrap_or(16);
+        sleep(
+            base_delay
+                .saturating_mul(multiplier)
+                .min(MAX_RECONNECT_DELAY),
+        );
+        failures = failures.saturating_add(1);
     }
 }
 
@@ -146,9 +189,9 @@ fn fetch_enabled_outputs() -> io::Result<Vec<OutputSnapshot>> {
         .map_err(io::Error::other)?;
     Ok(outputs
         .into_iter()
-        .filter(|output| output.active)
         .map(|output| OutputSnapshot {
             name: output.name,
+            active: output.active,
             mode: output
                 .current_mode
                 .map(|mode| (mode.width, mode.height, mode.refresh)),
@@ -202,6 +245,7 @@ mod tests {
     fn output(name: &str, x: i32) -> OutputSnapshot {
         OutputSnapshot {
             name: name.into(),
+            active: true,
             mode: Some((1920, 1080, 60_000)),
             position: (x, 0),
             scale: Some(1.25),
@@ -215,6 +259,32 @@ mod tests {
         assert_eq!(
             rendered,
             "# Generated by cosmolith from current Sway output state.\n# Manual edits will be replaced.\noutput \"DP 2\\\\\\\"dock\" enable mode 1920x1080@60Hz pos 1920 0 scale 1.25 transform normal\noutput \"eDP-1\" enable mode 1920x1080@60Hz pos 0 0 scale 1.25 transform normal\n"
+        );
+    }
+
+    #[test]
+    fn renders_active_and_disabled_outputs_as_complete_topology() {
+        let mut disabled = output("HDMI-A-1", 1920);
+        disabled.active = false;
+        disabled.mode = None;
+
+        let rendered = render_outputs(&[disabled, output("eDP-1", 0)]).unwrap();
+
+        assert!(rendered.contains("output \"HDMI-A-1\" disable\n"));
+        assert!(rendered.contains("output \"eDP-1\" enable mode 1920x1080@60Hz"));
+    }
+
+    #[test]
+    fn renderer_allows_empty_input_but_persistence_rejects_empty_topology() {
+        assert!(
+            render_outputs(&[])
+                .unwrap()
+                .starts_with("# Generated by cosmolith")
+        );
+        let path = temp_path("empty-renderer");
+        assert_eq!(
+            persist_outputs(&path, &[]).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
         );
     }
 
@@ -236,6 +306,7 @@ mod tests {
         let path = dir.join("90_cosmic_outputs.conf");
         fs::create_dir_all(&dir).unwrap();
         fs::write(&path, "old\n").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o741)).unwrap();
         persist_outputs(&path, &[output("eDP-1", 0)]).unwrap();
         assert!(
             fs::read_to_string(&path)
@@ -243,6 +314,22 @@ mod tests {
                 .contains("output \"eDP-1\"")
         );
         assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
+        assert_eq!(
+            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o640
+        );
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn new_file_uses_private_permissions() {
+        let dir = temp_path("new-mode-dir");
+        let path = dir.join("outputs.conf");
+        persist_outputs(&path, &[output("eDP-1", 0)]).unwrap();
+        assert_eq!(
+            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
         fs::remove_dir_all(dir).unwrap();
     }
 
@@ -258,18 +345,55 @@ mod tests {
     }
 
     #[test]
-    fn snapshots_on_startup_and_each_successful_output_event() {
-        let events = [
-            Ok(true),
-            Err("transient IPC failure".into()),
-            Ok(false),
-            Ok(true),
-        ];
-        let mut snapshots = 0;
+    fn retries_with_bounded_backoff_until_restart_succeeds() {
+        let mut attempts = 0;
+        let mut delays = Vec::new();
+        retry_subscriber(
+            Duration::from_secs(1),
+            || {
+                attempts += 1;
+                if attempts < 7 {
+                    Err("subscriber ended".into())
+                } else {
+                    Ok(())
+                }
+            },
+            |delay| delays.push(delay),
+        );
+        assert_eq!(attempts, 7);
+        assert_eq!(delays, [1, 2, 4, 8, 16, 16].map(Duration::from_secs));
+    }
 
-        snapshot_on_start_and_output_events(events, || snapshots += 1);
+    #[test]
+    fn successful_subscription_stops_retrying_without_sleeping() {
+        let mut attempts = 0;
+        let mut delays = Vec::new();
+        retry_subscriber(
+            Duration::from_millis(10),
+            || {
+                attempts += 1;
+                Ok(())
+            },
+            |delay| delays.push(delay),
+        );
+        assert_eq!(attempts, 1);
+        assert!(delays.is_empty());
+    }
 
-        assert_eq!(snapshots, 3);
+    #[test]
+    fn config_path_prefers_xdg_then_falls_back_to_home() {
+        assert_eq!(
+            config_path(Some("/xdg".into()), Some("/home/user".into())).unwrap(),
+            PathBuf::from("/xdg/regolith3/sway/config.d/90_cosmic_outputs.conf")
+        );
+        assert_eq!(
+            config_path(None, Some("/home/user".into())).unwrap(),
+            PathBuf::from("/home/user/.config/regolith3/sway/config.d/90_cosmic_outputs.conf")
+        );
+        assert_eq!(
+            config_path(None, None).unwrap_err().kind(),
+            io::ErrorKind::NotFound
+        );
     }
 
     fn temp_path(label: &str) -> std::path::PathBuf {

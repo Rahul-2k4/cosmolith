@@ -6,8 +6,7 @@ use std::{
     time::Duration,
 };
 
-mod display_persistence;
-use display_persistence::{default_config_path, start_sway_output_persistence};
+use cosmolith::display_persistence::{default_config_path, start_sway_output_persistence};
 
 mod watcher;
 use watcher::input::{send_initial_input_events, start_input_watcher};
@@ -38,7 +37,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("You are currently running: {:?}", session);
 
     let _display_persistence = if matches!(session, identifier::Desktop::Sway) {
-        Some(start_sway_output_persistence(default_config_path()?))
+        match default_config_path() {
+            Ok(path) => Some(start_sway_output_persistence(path)),
+            Err(error) => {
+                eprintln!(
+                    "Sway output persistence disabled: could not determine config path: {error}"
+                );
+                None
+            }
+        }
     } else {
         None
     };
