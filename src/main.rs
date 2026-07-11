@@ -8,6 +8,7 @@ use std::{
 
 use cosmolith::display_persistence::{default_config_path, start_sway_output_persistence};
 
+mod error;
 mod watcher;
 use watcher::input::{send_initial_input_events, start_input_watcher};
 mod event;
@@ -36,7 +37,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let session = get_current_session();
     println!("You are currently running: {:?}", session);
 
-    let _display_persistence = if matches!(session, identifier::Desktop::Sway) {
+    let _display_persistence = if matches!(
+        session,
+        identifier::Desktop::Sway | identifier::Desktop::Cosmic
+    ) {
         match default_config_path() {
             Ok(path) => Some(start_sway_output_persistence(path)),
             Err(error) => {

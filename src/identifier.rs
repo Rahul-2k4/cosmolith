@@ -1,7 +1,7 @@
 use std::env;
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 // The following is just an intermediatry to be passed to Compsoitor Module
 // compositor::init_compositor will match and convert the identified compositor to
 // their equivalent structs
@@ -19,37 +19,54 @@ pub enum Desktop {
     Unknown(String),
 }
 
-// #todo : Find edge cases where this logic might fail?
-// Think of other ways the following can be made more robust :}
-pub fn get_current_session() -> Desktop {
-    if let Ok(session_type) = env::var("XDG_SESSION_TYPE") {
-        match session_type.to_lowercase().as_str() {
-            "tty" => return Desktop::Tty,
-            "wayland" => {}
-            "x11" => {}
-            _ => {}
-        }
+#[derive(Debug, Default, Clone, Copy)]
+pub struct SessionEnvironment<'a> {
+    pub session_type: Option<&'a str>,
+    pub hyprland_signature: Option<&'a str>,
+    pub sway_socket: Option<&'a str>,
+    pub current_desktop: Option<&'a str>,
+    pub session_desktop: Option<&'a str>,
+    pub desktop_session: Option<&'a str>,
+    pub wayland_display: Option<&'a str>,
+    pub display: Option<&'a str>,
+}
+
+pub fn detect_session(environment: SessionEnvironment<'_>) -> Desktop {
+    if environment
+        .session_type
+        .is_some_and(|value| value.eq_ignore_ascii_case("tty"))
+    {
+        return Desktop::Tty;
     }
 
-    if env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok() {
+    if environment.hyprland_signature.is_some() {
         return Desktop::Hyprland;
     }
-    if env::var("SWAYSOCK").is_ok() {
+
+    let candidates = [
+        environment.current_desktop,
+        environment.session_desktop,
+        environment.desktop_session,
+    ];
+
+    // COSMIC commonly runs on the Sway-compatible Regolith session. Preserve
+    // that identity for callers while dispatching it to Sway below.
+    if candidates
+        .iter()
+        .flatten()
+        .any(|value| value.to_lowercase().contains("cosmic"))
+    {
+        return Desktop::Cosmic;
+    }
+
+    if environment.sway_socket.is_some() {
         return Desktop::Sway;
     }
-    let candidates = [
-        env::var("XDG_CURRENT_DESKTOP").ok(),
-        env::var("XDG_SESSION_DESKTOP").ok(),
-        env::var("DESKTOP_SESSION").ok(),
-    ];
 
     for value in candidates.into_iter().flatten() {
         let lower = value.to_lowercase();
         if lower.contains("hyprland") {
             return Desktop::Hyprland;
-        }
-        if lower.contains("sway") {
-            return Desktop::Sway;
         }
         if lower.contains("gnome") {
             return Desktop::Gnome;
@@ -63,17 +80,77 @@ pub fn get_current_session() -> Desktop {
         if lower.contains("xfce") {
             return Desktop::Xfce;
         }
-        if lower.contains("cosmic") {
-            return Desktop::Cosmic;
+        if lower.contains("sway") {
+            return Desktop::Sway;
         }
     }
 
-    if env::var("WAYLAND_DISPLAY").is_ok() {
+    if environment.wayland_display.is_some() {
         return Desktop::Wayland;
     }
-    if env::var("DISPLAY").is_ok() {
+    if environment.display.is_some() {
         return Desktop::X11;
     }
 
     Desktop::Unknown("Not Detected".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Desktop, SessionEnvironment, detect_session};
+
+    #[test]
+    fn detects_cosmic_over_sway_from_current_desktop() {
+        let session = detect_session(SessionEnvironment {
+            session_type: Some("wayland"),
+            sway_socket: Some("/run/user/1000/sway-ipc.sock"),
+            current_desktop: Some("Regolith-Wayland:COSMIC:sway"),
+            ..Default::default()
+        });
+
+        assert_eq!(session, Desktop::Cosmic);
+    }
+
+    #[test]
+    fn falls_back_to_sway_when_gnome_desktop_has_sway_socket() {
+        let session = detect_session(SessionEnvironment {
+            session_type: Some("wayland"),
+            sway_socket: Some("/run/user/1000/sway-ipc.sock"),
+            current_desktop: Some("GNOME"),
+            ..Default::default()
+        });
+
+        assert_eq!(session, Desktop::Sway);
+    }
+
+    #[test]
+    fn returns_unknown_without_session_or_display_environment() {
+        let session = detect_session(SessionEnvironment::default());
+
+        assert_eq!(session, Desktop::Unknown("Not Detected".into()));
+    }
+}
+
+// #todo : Find edge cases where this logic might fail?
+// Think of other ways the following can be made more robust :}
+pub fn get_current_session() -> Desktop {
+    let session_type = env::var("XDG_SESSION_TYPE").ok();
+    let hyprland_signature = env::var("HYPRLAND_INSTANCE_SIGNATURE").ok();
+    let sway_socket = env::var("SWAYSOCK").ok();
+    let current_desktop = env::var("XDG_CURRENT_DESKTOP").ok();
+    let session_desktop = env::var("XDG_SESSION_DESKTOP").ok();
+    let desktop_session = env::var("DESKTOP_SESSION").ok();
+    let wayland_display = env::var("WAYLAND_DISPLAY").ok();
+    let display = env::var("DISPLAY").ok();
+
+    detect_session(SessionEnvironment {
+        session_type: session_type.as_deref(),
+        hyprland_signature: hyprland_signature.as_deref(),
+        sway_socket: sway_socket.as_deref(),
+        current_desktop: current_desktop.as_deref(),
+        session_desktop: session_desktop.as_deref(),
+        desktop_session: desktop_session.as_deref(),
+        wayland_display: wayland_display.as_deref(),
+        display: display.as_deref(),
+    })
 }

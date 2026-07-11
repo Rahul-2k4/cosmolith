@@ -1,11 +1,12 @@
 // Watch Input Config Changes
 
-use std::{error::Error, sync::mpsc::Sender};
+use std::sync::mpsc::Sender;
 
-use cosmic_comp_config::{XkbConfig, KeyboardConfig};
 use cosmic_comp_config::input::InputConfig;
+use cosmic_comp_config::{KeyboardConfig, XkbConfig};
 use cosmic_config::{Config, ConfigGet};
 
+use crate::error::Error;
 use crate::event::{
     Event,
     input::{KeyboardEvent, MouseEvent, TouchpadEvent},
@@ -16,13 +17,13 @@ use std::sync::{Arc, Mutex};
 // implemented
 // 1. input_touchpad
 // 2. input_default
-// 3. xkb_config 
-// 4. keyboard_config 
+// 3. xkb_config
+// 4. keyboard_config
 // to be implemented
 // 5. workspaces
 // 6. pinned_workspaces
 // 7. input_touchpad_override
-// 8. input_devices 
+// 8. input_devices
 // 9. autotile
 // 10. autotile_behaviour
 // 11. active_hint
@@ -51,18 +52,21 @@ fn startup_keyboard_events(config: XkbConfig) -> Vec<Event> {
     KeyboardEvent::from(XkbConfig::default(), config)
 }
 
-fn send_events(tx: &Arc<Mutex<Sender<Event>>>, events: Vec<Event>) -> Result<(), Box<dyn Error>> {
+fn send_events(tx: &Arc<Mutex<Sender<Event>>>, events: Vec<Event>) -> Result<(), Error> {
     if let Ok(sender) = tx.lock() {
         for event in events {
-            sender.send(event)?;
+            sender
+                .send(event)
+                .map_err(|source| Error::event_send("input", source))?;
         }
     }
 
     Ok(())
 }
 
-pub fn send_initial_input_events(tx: &Arc<Mutex<Sender<Event>>>) -> Result<(), Box<dyn Error>> {
-    let config = Config::new(INPUTNAMESPACE, VERSION)?;
+pub fn send_initial_input_events(tx: &Arc<Mutex<Sender<Event>>>) -> Result<(), Error> {
+    let config = Config::new(INPUTNAMESPACE, VERSION)
+        .map_err(|source| Error::watcher_init("input", source))?;
 
     if let Ok(current_keyboard) = config.get::<XkbConfig>("xkb_config") {
         send_events(tx, startup_keyboard_events(current_keyboard))?;
@@ -73,8 +77,9 @@ pub fn send_initial_input_events(tx: &Arc<Mutex<Sender<Event>>>) -> Result<(), B
 
 pub fn start_input_watcher(
     tx: &Arc<Mutex<Sender<Event>>>,
-) -> Result<Box<dyn std::any::Any + Send>, Box<dyn Error>> {
-    let config = Config::new(INPUTNAMESPACE, VERSION)?;
+) -> Result<Box<dyn std::any::Any + Send>, Error> {
+    let config = Config::new(INPUTNAMESPACE, VERSION)
+        .map_err(|source| Error::watcher_init("input", source))?;
     let state = Arc::new(Mutex::new(InputState {
         touchpad: config.get::<InputConfig>("input_touchpad").ok(),
         mouse: config.get::<InputConfig>("input_default").ok(),
@@ -83,22 +88,24 @@ pub fn start_input_watcher(
     }));
 
     // Keep the watcher alive for the lifetime of the program.
-    let watcher = config.watch({
-        let tx = Arc::clone(&tx);
-        let state = Arc::clone(&state);
-        move |cfg: &Config, keys| {
-            if let Ok(sender) = tx.lock() {
-                if let Ok(mut state) = state.lock() {
-                    let events = state.from(cfg, keys);
-                    for event in events {
-                        if let Err(err) = sender.send(event) {
-                            eprintln!("Failed to send input event: {err}");
+    let watcher = config
+        .watch({
+            let tx = Arc::clone(&tx);
+            let state = Arc::clone(&state);
+            move |cfg: &Config, keys| {
+                if let Ok(sender) = tx.lock() {
+                    if let Ok(mut state) = state.lock() {
+                        let events = state.from(cfg, keys);
+                        for event in events {
+                            if let Err(err) = sender.send(event) {
+                                eprintln!("Failed to send input event: {err}");
+                            }
                         }
                     }
                 }
             }
-        }
-    })?;
+        })
+        .map_err(|source| Error::watcher_init("input", source))?;
 
     Ok(Box::new(watcher))
 }
@@ -144,14 +151,17 @@ impl InputState {
                 "keyboard_config" => match cfg.get::<KeyboardConfig>(key) {
                     Ok(new_config) => {
                         if let Some(old) = self.numslock.clone() {
-                            events.extend(KeyboardEvent::from_keyboard_config(old, new_config.clone()));
+                            events.extend(KeyboardEvent::from_keyboard_config(
+                                old,
+                                new_config.clone(),
+                            ));
                         }
                         self.numslock = Some(new_config);
                     }
                     Err(e) => {
                         eprintln!("Failed to get changed config due to the error: {:?}", e);
                     }
-                }
+                },
                 x => {
                     eprintln!(
                         "Unknown key found in Input (com.system76.CosmicComp): {}",

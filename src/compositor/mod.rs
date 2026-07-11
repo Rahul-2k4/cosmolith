@@ -2,8 +2,8 @@ pub mod gnome;
 pub mod hyprland;
 pub mod input;
 pub mod kde;
-pub mod sway;
 pub mod shortcut;
+pub mod sway;
 use crate::event::Event;
 use std::error::Error;
 pub type CompositorResult = Result<(), Box<dyn Error + Send + Sync>>;
@@ -41,7 +41,7 @@ pub fn init_compositor(desktop: crate::identifier::Desktop) -> Option<Box<dyn Co
             }
             None
         }
-        crate::identifier::Desktop::Sway => {
+        crate::identifier::Desktop::Sway | crate::identifier::Desktop::Cosmic => {
             let mut compositor = sway::Sway::new();
             if compositor.init().is_ok() {
                 return Some(Box::new(compositor));
@@ -49,12 +49,12 @@ pub fn init_compositor(desktop: crate::identifier::Desktop) -> Option<Box<dyn Co
             None
         }
         crate::identifier::Desktop::Kde => {
-              let mut compositor = kde::Kde::new();
-              if compositor.init().is_ok() {
-                  return Some(Box::new(compositor));
-              }
-              None
-         }
+            let mut compositor = kde::Kde::new();
+            if compositor.init().is_ok() {
+                return Some(Box::new(compositor));
+            }
+            None
+        }
         crate::identifier::Desktop::Gnome => {
             let mut compositor = gnome::Gnome::new();
             if compositor.init().is_ok() {
