@@ -163,3 +163,58 @@ impl InputState {
         events
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::startup_keyboard_events;
+    use crate::event::{
+        input::{InputEvent, KeyboardEvent},
+        Event,
+    };
+    use cosmic_comp_config::XkbConfig;
+
+    #[test]
+    fn keyboard_event_conversion_emits_variant_only_change() {
+        let old = XkbConfig {
+            layout: "us".into(),
+            ..XkbConfig::default()
+        };
+        let new = XkbConfig {
+            layout: "us".into(),
+            variant: "intl".into(),
+            ..old.clone()
+        };
+
+        let events = KeyboardEvent::from(old, new);
+
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &events[0],
+            Event::Input(InputEvent::Keyboard(KeyboardEvent::Variant(variant)))
+                if variant == "intl"
+        ));
+    }
+
+    #[test]
+    fn startup_keyboard_events_emit_multi_layout_and_matching_variants() {
+        let config = XkbConfig {
+            layout: "us,fr".into(),
+            variant: "intl,oss".into(),
+            ..XkbConfig::default()
+        };
+
+        let events = startup_keyboard_events(config);
+
+        assert_eq!(events.len(), 2);
+        assert!(matches!(
+            &events[0],
+            Event::Input(InputEvent::Keyboard(KeyboardEvent::Layout(layout)))
+                if layout == "us,fr"
+        ));
+        assert!(matches!(
+            &events[1],
+            Event::Input(InputEvent::Keyboard(KeyboardEvent::Variant(variant)))
+                if variant == "intl,oss"
+        ));
+    }
+}
