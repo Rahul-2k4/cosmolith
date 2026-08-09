@@ -19,10 +19,76 @@ pub enum Desktop {
     Unknown(String),
 }
 
+#[test]
+fn empty_environment_values_are_not_session_indicators() {
+    let _guard = EnvGuard::clear();
+    for name in [
+        "XDG_SESSION_TYPE",
+        "HYPRLAND_INSTANCE_SIGNATURE",
+        "SWAYSOCK",
+        "XDG_CURRENT_DESKTOP",
+        "XDG_SESSION_DESKTOP",
+        "DESKTOP_SESSION",
+        "WAYLAND_DISPLAY",
+        "DISPLAY",
+    ] {
+        unsafe { env::set_var(name, " ") };
+    }
+
+    assert!(matches!(get_current_session(), Desktop::Unknown(_)));
+}
+
+#[test]
+fn cosmic_sway_desktop_value_selects_sway_backend() {
+    let _guard = EnvGuard::clear();
+    unsafe { env::set_var("XDG_CURRENT_DESKTOP", "Regolith-Wayland:COSMIC:sway") };
+
+    assert!(matches!(get_current_session(), Desktop::Sway));
+}
+
+struct EnvGuard {
+    values: Vec<(&'static str, Option<String>)>,
+}
+
+impl EnvGuard {
+    fn clear() -> Self {
+        let names = [
+            "XDG_SESSION_TYPE",
+            "HYPRLAND_INSTANCE_SIGNATURE",
+            "SWAYSOCK",
+            "XDG_CURRENT_DESKTOP",
+            "XDG_SESSION_DESKTOP",
+            "DESKTOP_SESSION",
+            "WAYLAND_DISPLAY",
+            "DISPLAY",
+        ];
+        let values = names
+            .into_iter()
+            .map(|name| {
+                let previous = env::var(name).ok();
+                unsafe { env::remove_var(name) };
+                (name, previous)
+            })
+            .collect();
+        Self { values }
+    }
+}
+
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        for (name, value) in self.values.drain(..) {
+            match value {
+                Some(value) => unsafe { env::set_var(name, value) },
+                None => unsafe { env::remove_var(name) },
+            }
+        }
+    }
+}
+
 // #todo : Find edge cases where this logic might fail?
 // Think of other ways the following can be made more robust :}
 pub fn get_current_session() -> Desktop {
-    if let Ok(session_type) = env::var("XDG_SESSION_TYPE") {
+    if let Some(session_type) = non_empty_env("XDG_SESSION_TYPE") {
         match session_type.to_lowercase().as_str() {
             "tty" => return Desktop::Tty,
             "wayland" => {}
@@ -31,20 +97,23 @@ pub fn get_current_session() -> Desktop {
         }
     }
 
-    if env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok() {
+    if non_empty_env("HYPRLAND_INSTANCE_SIGNATURE").is_some() {
         return Desktop::Hyprland;
     }
-    if env::var("SWAYSOCK").is_ok() {
+    if non_empty_env("SWAYSOCK").is_some() {
         return Desktop::Sway;
     }
     let candidates = [
-        env::var("XDG_CURRENT_DESKTOP").ok(),
-        env::var("XDG_SESSION_DESKTOP").ok(),
-        env::var("DESKTOP_SESSION").ok(),
+        non_empty_env("XDG_CURRENT_DESKTOP"),
+        non_empty_env("XDG_SESSION_DESKTOP"),
+        non_empty_env("DESKTOP_SESSION"),
     ];
 
     for value in candidates.into_iter().flatten() {
         let lower = value.to_lowercase();
+        if lower.contains("cosmic") && lower.contains("sway") {
+            return Desktop::Sway;
+        }
         if lower.contains("hyprland") {
             return Desktop::Hyprland;
         }
@@ -68,12 +137,16 @@ pub fn get_current_session() -> Desktop {
         }
     }
 
-    if env::var("WAYLAND_DISPLAY").is_ok() {
+    if non_empty_env("WAYLAND_DISPLAY").is_some() {
         return Desktop::Wayland;
     }
-    if env::var("DISPLAY").is_ok() {
+    if non_empty_env("DISPLAY").is_some() {
         return Desktop::X11;
     }
 
     Desktop::Unknown("Not Detected".into())
+}
+
+fn non_empty_env(name: &str) -> Option<String> {
+    env::var(name).ok().filter(|value| !value.trim().is_empty())
 }
