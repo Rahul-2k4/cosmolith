@@ -1,1 +1,2 @@
 extend-diff-ignore = (^|/)\.cargo/config\.toml$
+extend-diff-ignore = (^|/)debian/\.cargo(/|$)
