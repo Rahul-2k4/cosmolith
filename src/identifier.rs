@@ -1,4 +1,5 @@
 use std::env;
+use std::sync::{Mutex, MutexGuard, OnceLock};
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -21,6 +22,27 @@ pub enum Desktop {
 
 #[test]
 fn empty_environment_values_are_not_session_indicators() {
+    let _lock = environment_test_lock();
+    let _guard = EnvGuard::clear();
+    for name in [
+        "XDG_SESSION_TYPE",
+        "HYPRLAND_INSTANCE_SIGNATURE",
+        "SWAYSOCK",
+        "XDG_CURRENT_DESKTOP",
+        "XDG_SESSION_DESKTOP",
+        "DESKTOP_SESSION",
+        "WAYLAND_DISPLAY",
+        "DISPLAY",
+    ] {
+        unsafe { env::set_var(name, "") };
+    }
+
+    assert!(matches!(get_current_session(), Desktop::Unknown(_)));
+}
+
+#[test]
+fn whitespace_environment_values_are_not_session_indicators() {
+    let _lock = environment_test_lock();
     let _guard = EnvGuard::clear();
     for name in [
         "XDG_SESSION_TYPE",
@@ -40,10 +62,18 @@ fn empty_environment_values_are_not_session_indicators() {
 
 #[test]
 fn cosmic_sway_desktop_value_selects_sway_backend() {
+    let _lock = environment_test_lock();
     let _guard = EnvGuard::clear();
     unsafe { env::set_var("XDG_CURRENT_DESKTOP", "Regolith-Wayland:COSMIC:sway") };
 
     assert!(matches!(get_current_session(), Desktop::Sway));
+}
+
+fn environment_test_lock() -> MutexGuard<'static, ()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 struct EnvGuard {

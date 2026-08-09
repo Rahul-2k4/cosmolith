@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use cosmic_config::Config;
 use cosmic_settings_config::shortcuts::{self, Action, Binding};
 
+use crate::error::Error as StructuredError;
 use crate::event::{Event, ShortcutEvent};
 
 pub const SHORTCUTS_NAMESPACE: &str = shortcuts::ID;
@@ -17,7 +18,8 @@ pub struct ShortcutsState {
 pub fn start_shortcuts_watcher(
     tx: &Arc<Mutex<Sender<Event>>>,
 ) -> Result<Box<dyn std::any::Any + Send>, Box<dyn Error>> {
-    let config = Config::new(SHORTCUTS_NAMESPACE, VERSION)?;
+    let config = Config::new(SHORTCUTS_NAMESPACE, VERSION)
+        .map_err(|source| StructuredError::config_init(SHORTCUTS_NAMESPACE, source))?;
     
     let initial_shortcuts = shortcuts::shortcuts(&config).0;
     
@@ -65,7 +67,8 @@ pub fn start_shortcuts_watcher(
                 }
             }
         }
-    })?;
+    })
+    .map_err(|source| StructuredError::watcher_setup("shortcuts", source))?;
 
     Ok(Box::new(watcher))
 }
