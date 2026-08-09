@@ -1,4 +1,4 @@
-cosmolith (0.1.0-1-1regolith-resolute) resolute; urgency=medium
+cosmolith (0.1.0-1) resolute; urgency=medium
 
   * Initial Regolith package for the COSMIC configuration daemon.
 
