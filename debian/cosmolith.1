@@ -1,0 +1,29 @@
+.TH COSMOLITH 1 "2026-08-09" "cosmolith 0.1.0" "User Commands"
+.SH NAME
+cosmolith \- apply COSMIC configuration changes to a running Wayland compositor
+.SH SYNOPSIS
+.B cosmolith
+.SH DESCRIPTION
+.B cosmolith
+is a long-running daemon that watches COSMIC configuration changes and applies
+the supported changes to the running Wayland compositor through its IPC
+interface. It also sends the current input configuration when it starts.
+.PP
+The compositor backend is selected from the current session. The package
+supports Hyprland, Sway, KDE, and GNOME backends; only events implemented by
+the selected backend are applied.
+.SH INVOCATION
+Run
+.B cosmolith
+from the active graphical session. The program takes no documented command-line
+options or arguments.
+.SH LIMITATIONS
+Only the configuration events implemented by the selected compositor backend
+are applied. Unsupported events may be logged or ignored. If no supported
+compositor is detected, configuration events are logged but are not applied.
+The compositor must already be running and expose the IPC interface required by
+its backend.
+.SH SEE ALSO
+.BR cosmic-config (1)
+.SH AUTHORS
+Regolith Linux contributors.

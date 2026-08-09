@@ -1,0 +1,23 @@
+Source: cosmolith
+Section: admin
+Priority: optional
+Maintainer: Regolith Linux <regolith.linux@gmail.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ cargo,
+ rustc,
+ pkg-config,
+ libglib2.0-dev,
+ libxkbcommon-dev
+Standards-Version: 4.7.0
+Homepage: https://github.com/regolith-linux/cosmolith
+Rules-Requires-Root: no
+
+Package: cosmolith
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends}
+Description: COSMIC configuration daemon for Wayland compositors
+ cosmolith watches COSMIC configuration changes and applies supported
+ settings to the running Wayland compositor through its IPC interface.

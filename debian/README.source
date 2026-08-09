@@ -1,0 +1,17 @@
+cosmolith for Regolith
+======================
+
+This package uses Debian's 3.0 (quilt) format. Voulage prepares the upstream
+source tarball from the repository with debian/ excluded, then builds the
+Debian tarball from this directory.
+
+Rust dependencies are vendored during the clean/source-preparation phase into
+vendor.tar. The binary build extracts that archive and builds Cargo offline.
+Run a local binary build with:
+
+  dpkg-buildpackage -b -us -uc -d
+
+For a source package, use Voulage's source build flow (debuild -S -sa -us -uc)
+so the upstream tarball and Debian tarball are generated together. A source
+build requires network access for the initial cargo vendor step; subsequent
+binary builds use the recorded vendor.tar archive.

@@ -1,0 +1,5 @@
+cosmolith (0.1.0-1-1regolith-resolute) resolute; urgency=medium
+
+  * Initial Regolith package for the COSMIC configuration daemon.
+
+ -- Regolith Linux <regolith.linux@gmail.com>  Sun, 09 Aug 2026 12:00:00 +0000

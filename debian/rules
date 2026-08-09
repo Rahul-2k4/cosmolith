@@ -1,0 +1,23 @@
+#!/usr/bin/make -f
+
+export CARGO_HOME = $(CURDIR)/debian/.cargo
+export CARGO_TERM_COLOR = never
+export CARGO_BUILD_JOBS ?= $(shell nproc)
+VENDOR ?= 1
+
+%:
+	dh $@
+
+override_dh_auto_clean:
+	if ! ischroot && test "$(VENDOR)" = "1"; then \
+		mkdir -p .cargo; \
+		cargo vendor --locked --versioned-dirs | head -n -1 > .cargo/config.toml; \
+		echo 'directory = "vendor"' >> .cargo/config.toml; \
+		tar pcf vendor.tar vendor; \
+		rm -rf vendor; \
+	fi
+	dh_auto_clean
+
+override_dh_auto_build:
+	tar pxf vendor.tar
+	CARGO_NET_OFFLINE=true cargo build --release --locked --offline
