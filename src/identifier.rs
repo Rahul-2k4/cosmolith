@@ -1,5 +1,4 @@
 use std::env;
-use std::sync::{Mutex, MutexGuard, OnceLock};
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -20,69 +19,17 @@ pub enum Desktop {
     Unknown(String),
 }
 
-#[test]
-fn empty_environment_values_are_not_session_indicators() {
-    let _lock = environment_test_lock();
-    let _guard = EnvGuard::clear();
-    for name in [
-        "XDG_SESSION_TYPE",
-        "HYPRLAND_INSTANCE_SIGNATURE",
-        "SWAYSOCK",
-        "XDG_CURRENT_DESKTOP",
-        "XDG_SESSION_DESKTOP",
-        "DESKTOP_SESSION",
-        "WAYLAND_DISPLAY",
-        "DISPLAY",
-    ] {
-        unsafe { env::set_var(name, "") };
-    }
+#[cfg(test)]
+mod tests {
+    use std::sync::{Mutex, MutexGuard, OnceLock};
 
-    assert!(matches!(get_current_session(), Desktop::Unknown(_)));
-}
+    use super::{env, get_current_session, Desktop};
 
-#[test]
-fn whitespace_environment_values_are_not_session_indicators() {
-    let _lock = environment_test_lock();
-    let _guard = EnvGuard::clear();
-    for name in [
-        "XDG_SESSION_TYPE",
-        "HYPRLAND_INSTANCE_SIGNATURE",
-        "SWAYSOCK",
-        "XDG_CURRENT_DESKTOP",
-        "XDG_SESSION_DESKTOP",
-        "DESKTOP_SESSION",
-        "WAYLAND_DISPLAY",
-        "DISPLAY",
-    ] {
-        unsafe { env::set_var(name, " ") };
-    }
-
-    assert!(matches!(get_current_session(), Desktop::Unknown(_)));
-}
-
-#[test]
-fn cosmic_sway_desktop_value_selects_sway_backend() {
-    let _lock = environment_test_lock();
-    let _guard = EnvGuard::clear();
-    unsafe { env::set_var("XDG_CURRENT_DESKTOP", "Regolith-Wayland:COSMIC:sway") };
-
-    assert!(matches!(get_current_session(), Desktop::Sway));
-}
-
-fn environment_test_lock() -> MutexGuard<'static, ()> {
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
-
-struct EnvGuard {
-    values: Vec<(&'static str, Option<String>)>,
-}
-
-impl EnvGuard {
-    fn clear() -> Self {
-        let names = [
+    #[test]
+    fn empty_environment_values_are_not_session_indicators() {
+        let _lock = environment_test_lock();
+        let _guard = EnvGuard::clear();
+        for name in [
             "XDG_SESSION_TYPE",
             "HYPRLAND_INSTANCE_SIGNATURE",
             "SWAYSOCK",
@@ -91,25 +38,84 @@ impl EnvGuard {
             "DESKTOP_SESSION",
             "WAYLAND_DISPLAY",
             "DISPLAY",
-        ];
-        let values = names
-            .into_iter()
-            .map(|name| {
-                let previous = env::var(name).ok();
-                unsafe { env::remove_var(name) };
-                (name, previous)
-            })
-            .collect();
-        Self { values }
-    }
-}
+        ] {
+            unsafe { env::set_var(name, "") };
+        }
 
-impl Drop for EnvGuard {
-    fn drop(&mut self) {
-        for (name, value) in self.values.drain(..) {
-            match value {
-                Some(value) => unsafe { env::set_var(name, value) },
-                None => unsafe { env::remove_var(name) },
+        assert!(matches!(get_current_session(), Desktop::Unknown(_)));
+    }
+
+    #[test]
+    fn whitespace_environment_values_are_not_session_indicators() {
+        let _lock = environment_test_lock();
+        let _guard = EnvGuard::clear();
+        for name in [
+            "XDG_SESSION_TYPE",
+            "HYPRLAND_INSTANCE_SIGNATURE",
+            "SWAYSOCK",
+            "XDG_CURRENT_DESKTOP",
+            "XDG_SESSION_DESKTOP",
+            "DESKTOP_SESSION",
+            "WAYLAND_DISPLAY",
+            "DISPLAY",
+        ] {
+            unsafe { env::set_var(name, " ") };
+        }
+
+        assert!(matches!(get_current_session(), Desktop::Unknown(_)));
+    }
+
+    #[test]
+    fn cosmic_sway_desktop_value_selects_sway_backend() {
+        let _lock = environment_test_lock();
+        let _guard = EnvGuard::clear();
+        unsafe { env::set_var("XDG_CURRENT_DESKTOP", "Regolith-Wayland:COSMIC:sway") };
+
+        assert!(matches!(get_current_session(), Desktop::Sway));
+    }
+
+    fn environment_test_lock() -> MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    struct EnvGuard {
+        values: Vec<(&'static str, Option<String>)>,
+    }
+
+    impl EnvGuard {
+        fn clear() -> Self {
+            let names = [
+                "XDG_SESSION_TYPE",
+                "HYPRLAND_INSTANCE_SIGNATURE",
+                "SWAYSOCK",
+                "XDG_CURRENT_DESKTOP",
+                "XDG_SESSION_DESKTOP",
+                "DESKTOP_SESSION",
+                "WAYLAND_DISPLAY",
+                "DISPLAY",
+            ];
+            let values = names
+                .into_iter()
+                .map(|name| {
+                    let previous = env::var(name).ok();
+                    unsafe { env::remove_var(name) };
+                    (name, previous)
+                })
+                .collect();
+            Self { values }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for (name, value) in self.values.drain(..) {
+                match value {
+                    Some(value) => unsafe { env::set_var(name, value) },
+                    None => unsafe { env::remove_var(name) },
+                }
             }
         }
     }
