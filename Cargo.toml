@@ -4,13 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-libcosmic = { git = "https://github.com/pop-os/libcosmic", branch = "master" }
 cosmic-config = { git = "https://github.com/pop-os/libcosmic" }
-cosmic-comp-config = { git = "https://github.com/pop-os/cosmic-comp" }
+cosmic-comp-config = { git = "https://github.com/pop-os/cosmic-comp", rev = "0553e857c3d3dcd049395f43bf211a989715610e" }
 hyprland = { git = "https://github.com/hyprland-community/hyprland-rs", branch = "master", features = ["keyword"] }
 thiserror = "2.0.18"
 swayipc = "4.0.0"
 zbus = "5.13.2"
 gio = "0.21.5"
-cosmic-settings-config = { git = "https://github.com/pop-os/cosmic-settings-daemon" }
+cosmic-settings-config = { git = "https://github.com/pop-os/cosmic-settings-daemon", rev = "e37160f14d1e7ee428f973cd2848b4e95f83dfe1" }
 xkbcommon = "0.7.0"
