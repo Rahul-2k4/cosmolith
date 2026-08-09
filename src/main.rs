@@ -1,13 +1,15 @@
 // src/main.rs
 use cosmic_config::Config;
 use std::{
-    error::Error,
+    error::Error as StdError,
     sync::{Arc, Mutex, mpsc},
     time::Duration,
 };
 
 mod watcher;
+mod error;
 use watcher::input::{send_initial_input_events, start_input_watcher};
+use crate::error::Error;
 mod event;
 use event::Event;
 
@@ -19,8 +21,9 @@ use compositor::init_compositor;
 
 use watcher::shortcuts::start_shortcuts_watcher;
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let _config = Config::new("com.system76.CosmicComp", 1)?;
+fn main() -> Result<(), Box<dyn StdError>> {
+    let _config = Config::new("com.system76.CosmicComp", 1)
+        .map_err(|source| Error::config_init("com.system76.CosmicComp", source))?;
     // Channel used to receive change notifications from the watcher callback.
     let (tx, rx) = mpsc::channel::<Event>();
     let tx = Arc::new(Mutex::new(tx));

@@ -1,6 +1,6 @@
 // Watch Input Config Changes
 
-use std::{error::Error, sync::mpsc::Sender};
+use std::{error::Error as StdError, sync::mpsc::Sender};
 
 use cosmic_comp_config::{XkbConfig, KeyboardConfig};
 use cosmic_comp_config::input::InputConfig;
@@ -10,6 +10,7 @@ use crate::event::{
     Event,
     input::{KeyboardEvent, MouseEvent, TouchpadEvent},
 };
+use crate::error::Error;
 use std::sync::{Arc, Mutex};
 
 // #todo : Find all the keys linked to  com.system76.CosmicComp and catch those and read events
@@ -51,21 +52,30 @@ fn startup_keyboard_events(config: XkbConfig) -> Vec<Event> {
     KeyboardEvent::from(XkbConfig::default(), config)
 }
 
-fn send_events(tx: &Arc<Mutex<Sender<Event>>>, events: Vec<Event>) -> Result<(), Box<dyn Error>> {
-    if let Ok(sender) = tx.lock() {
-        for event in events {
-            sender.send(event)?;
-        }
+fn send_events(
+    tx: &Arc<Mutex<Sender<Event>>>,
+    events: Vec<Event>,
+) -> Result<(), Box<dyn StdError>> {
+    let sender = tx.lock().map_err(|_| Error::channel_lock("input"))?;
+    for event in events {
+        sender
+            .send(event)
+            .map_err(|source| Error::channel_send("input", source))?;
     }
 
     Ok(())
 }
 
-pub fn send_initial_input_events(tx: &Arc<Mutex<Sender<Event>>>) -> Result<(), Box<dyn Error>> {
-    let config = Config::new(INPUTNAMESPACE, VERSION)?;
+pub fn send_initial_input_events(tx: &Arc<Mutex<Sender<Event>>>) -> Result<(), Box<dyn StdError>> {
+    let config = Config::new(INPUTNAMESPACE, VERSION)
+        .map_err(|source| Error::config_init(INPUTNAMESPACE, source))?;
 
-    if let Ok(current_keyboard) = config.get::<XkbConfig>("xkb_config") {
-        send_events(tx, startup_keyboard_events(current_keyboard))?;
+    match config.get::<XkbConfig>("xkb_config") {
+        Ok(current_keyboard) => send_events(tx, startup_keyboard_events(current_keyboard))?,
+        Err(source) => eprintln!(
+            "{}",
+            Error::config_read(INPUTNAMESPACE, "xkb_config", source)
+        ),
     }
 
     Ok(())
@@ -73,8 +83,9 @@ pub fn send_initial_input_events(tx: &Arc<Mutex<Sender<Event>>>) -> Result<(), B
 
 pub fn start_input_watcher(
     tx: &Arc<Mutex<Sender<Event>>>,
-) -> Result<Box<dyn std::any::Any + Send>, Box<dyn Error>> {
-    let config = Config::new(INPUTNAMESPACE, VERSION)?;
+) -> Result<Box<dyn std::any::Any + Send>, Box<dyn StdError>> {
+    let config = Config::new(INPUTNAMESPACE, VERSION)
+        .map_err(|source| Error::config_init(INPUTNAMESPACE, source))?;
     let state = Arc::new(Mutex::new(InputState {
         touchpad: config.get::<InputConfig>("input_touchpad").ok(),
         mouse: config.get::<InputConfig>("input_default").ok(),
@@ -87,18 +98,22 @@ pub fn start_input_watcher(
         let tx = Arc::clone(&tx);
         let state = Arc::clone(&state);
         move |cfg: &Config, keys| {
-            if let Ok(sender) = tx.lock() {
-                if let Ok(mut state) = state.lock() {
-                    let events = state.from(cfg, keys);
-                    for event in events {
-                        if let Err(err) = sender.send(event) {
-                            eprintln!("Failed to send input event: {err}");
+            match tx.lock() {
+                Ok(sender) => match state.lock() {
+                    Ok(mut state) => {
+                        for event in state.from(cfg, keys) {
+                            if let Err(source) = sender.send(event) {
+                                eprintln!("{}", Error::channel_send("input", source));
+                            }
                         }
                     }
-                }
+                    Err(_) => eprintln!("{}", Error::channel_lock("input state")),
+                },
+                Err(_) => eprintln!("{}", Error::channel_lock("input")),
             }
         }
-    })?;
+    })
+    .map_err(|source| Error::watcher_setup("input", source))?;
 
     Ok(Box::new(watcher))
 }
@@ -115,9 +130,10 @@ impl InputState {
                         }
                         self.touchpad = Some(new_config);
                     }
-                    Err(e) => {
-                        eprintln!("Failed to get changed config due to the error: {:?}", e);
-                    }
+                    Err(source) => eprintln!(
+                        "{}",
+                        Error::config_read(INPUTNAMESPACE, key, source)
+                    ),
                 },
                 "input_default" => match cfg.get::<InputConfig>(key) {
                     Ok(new_config) => {
@@ -126,9 +142,10 @@ impl InputState {
                         }
                         self.mouse = Some(new_config);
                     }
-                    Err(e) => {
-                        eprintln!("Failed to get changed config due to the error: {:?}", e);
-                    }
+                    Err(source) => eprintln!(
+                        "{}",
+                        Error::config_read(INPUTNAMESPACE, key, source)
+                    ),
                 },
                 "xkb_config" => match cfg.get::<XkbConfig>(key) {
                     Ok(new_config) => {
@@ -137,9 +154,10 @@ impl InputState {
                         }
                         self.keyboard = Some(new_config);
                     }
-                    Err(e) => {
-                        eprintln!("Failed to get changed config due to the error: {:?}", e);
-                    }
+                    Err(source) => eprintln!(
+                        "{}",
+                        Error::config_read(INPUTNAMESPACE, key, source)
+                    ),
                 },
                 "keyboard_config" => match cfg.get::<KeyboardConfig>(key) {
                     Ok(new_config) => {
@@ -148,9 +166,10 @@ impl InputState {
                         }
                         self.numslock = Some(new_config);
                     }
-                    Err(e) => {
-                        eprintln!("Failed to get changed config due to the error: {:?}", e);
-                    }
+                    Err(source) => eprintln!(
+                        "{}",
+                        Error::config_read(INPUTNAMESPACE, key, source)
+                    ),
                 }
                 x => {
                     eprintln!(
