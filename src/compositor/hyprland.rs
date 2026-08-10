@@ -5,10 +5,10 @@ use crate::event::input::InputEvent;
 use hyprland::keyword::Keyword;
 use std::env;
 
+use cosmic_comp_config::NumlockState;
 use cosmic_comp_config::input::{
     AccelConfig, AccelProfile, ClickMethod, ScrollConfig, ScrollMethod, TapButtonMap, TapConfig,
 };
-use cosmic_comp_config::NumlockState;
 
 #[derive(Debug, Default)]
 pub struct Hyprland {
@@ -110,7 +110,6 @@ impl Compositor for Hyprland {
 
 // #todo: For all the todos -> Find equivalent functions in documentation and update
 impl Input for Hyprland {
-
     // fn touchpad_state(&self, _state: DeviceState) -> InputResult {
     //     // TODO: Hyprland does not expose a direct enable/disable for touchpad.
     //     dbg!("Hyprland: touchpad enable/disable not supported");

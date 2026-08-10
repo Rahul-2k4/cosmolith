@@ -1,9 +1,9 @@
 use crate::compositor::input::{Input, InputResult};
 use crate::compositor::{Compositor, CompositorResult};
-use crate::event::input::InputEvent;
 use crate::event::Event;
-use gio::prelude::*;
+use crate::event::input::InputEvent;
 use gio::Settings;
+use gio::prelude::*;
 
 pub struct Gnome {
     touchpad_settings: Settings,

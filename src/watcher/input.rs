@@ -2,8 +2,8 @@
 
 use std::{error::Error, sync::mpsc::Sender};
 
-use cosmic_comp_config::{XkbConfig, KeyboardConfig};
 use cosmic_comp_config::input::InputConfig;
+use cosmic_comp_config::{KeyboardConfig, XkbConfig};
 use cosmic_config::{Config, ConfigGet};
 
 use crate::event::{
@@ -16,13 +16,13 @@ use std::sync::{Arc, Mutex};
 // implemented
 // 1. input_touchpad
 // 2. input_default
-// 3. xkb_config 
-// 4. keyboard_config 
+// 3. xkb_config
+// 4. keyboard_config
 // to be implemented
 // 5. workspaces
 // 6. pinned_workspaces
 // 7. input_touchpad_override
-// 8. input_devices 
+// 8. input_devices
 // 9. autotile
 // 10. autotile_behaviour
 // 11. active_hint
@@ -144,14 +144,17 @@ impl InputState {
                 "keyboard_config" => match cfg.get::<KeyboardConfig>(key) {
                     Ok(new_config) => {
                         if let Some(old) = self.numslock.clone() {
-                            events.extend(KeyboardEvent::from_keyboard_config(old, new_config.clone()));
+                            events.extend(KeyboardEvent::from_keyboard_config(
+                                old,
+                                new_config.clone(),
+                            ));
                         }
                         self.numslock = Some(new_config);
                     }
                     Err(e) => {
                         eprintln!("Failed to get changed config due to the error: {:?}", e);
                     }
-                }
+                },
                 x => {
                     eprintln!(
                         "Unknown key found in Input (com.system76.CosmicComp): {}",
@@ -168,8 +171,8 @@ impl InputState {
 mod tests {
     use super::startup_keyboard_events;
     use crate::event::{
-        input::{InputEvent, KeyboardEvent},
         Event,
+        input::{InputEvent, KeyboardEvent},
     };
     use cosmic_comp_config::XkbConfig;
 

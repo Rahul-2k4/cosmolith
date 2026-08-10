@@ -1,8 +1,8 @@
-use cosmic_comp_config::{XkbConfig, KeyboardConfig, NumlockState};
 use cosmic_comp_config::input::{
     AccelConfig, ClickMethod, DeviceState, InputConfig, ScrollConfig, ScrollMethod, TapButtonMap,
     TapConfig,
 };
+use cosmic_comp_config::{KeyboardConfig, NumlockState, XkbConfig};
 
 use super::Event;
 

@@ -1,13 +1,26 @@
 use cosmic_settings_config::shortcuts::{
     Action as CosmicAction, Binding,
-    action::{Direction as CosmicDirection, FocusDirection as CosmicFocusDirection, System as CosmicSystem},
+    action::{
+        Direction as CosmicDirection, FocusDirection as CosmicFocusDirection,
+        System as CosmicSystem,
+    },
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FocusDirection { Left, Right, Up, Down }
+pub enum FocusDirection {
+    Left,
+    Right,
+    Up,
+    Down,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Direction { Left, Right, Up, Down }
+pub enum Direction {
+    Left,
+    Right,
+    Up,
+    Down,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SystemAction {
@@ -50,10 +63,16 @@ impl From<CosmicAction> for Shortcut {
     fn from(action: CosmicAction) -> Self {
         match action {
             CosmicAction::Close => Shortcut::Close,
-            CosmicAction::Focus(CosmicFocusDirection::Left) => Shortcut::Focus(FocusDirection::Left),
-            CosmicAction::Focus(CosmicFocusDirection::Right) => Shortcut::Focus(FocusDirection::Right),
+            CosmicAction::Focus(CosmicFocusDirection::Left) => {
+                Shortcut::Focus(FocusDirection::Left)
+            }
+            CosmicAction::Focus(CosmicFocusDirection::Right) => {
+                Shortcut::Focus(FocusDirection::Right)
+            }
             CosmicAction::Focus(CosmicFocusDirection::Up) => Shortcut::Focus(FocusDirection::Up),
-            CosmicAction::Focus(CosmicFocusDirection::Down) => Shortcut::Focus(FocusDirection::Down),
+            CosmicAction::Focus(CosmicFocusDirection::Down) => {
+                Shortcut::Focus(FocusDirection::Down)
+            }
             CosmicAction::Move(CosmicDirection::Left) => Shortcut::Move(Direction::Left),
             CosmicAction::Move(CosmicDirection::Right) => Shortcut::Move(Direction::Right),
             CosmicAction::Move(CosmicDirection::Up) => Shortcut::Move(Direction::Up),
@@ -94,6 +113,12 @@ impl From<CosmicAction> for Shortcut {
 
 #[derive(Debug, Clone)]
 pub enum ShortcutEvent {
-    Add { shortcut: Shortcut, binding: Binding },
-    Remove { shortcut: Shortcut, binding: Binding },
+    Add {
+        shortcut: Shortcut,
+        binding: Binding,
+    },
+    Remove {
+        shortcut: Shortcut,
+        binding: Binding,
+    },
 }

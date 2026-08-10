@@ -4,16 +4,16 @@ use std::sync::Mutex;
 use swayipc::Connection;
 
 use crate::compositor::input::{Input, InputResult};
+use crate::compositor::shortcut::Shortcut;
 use crate::compositor::{Compositor, CompositorResult};
 use crate::event::Event;
 use crate::event::input::InputEvent;
 use crate::event::shortcuts::ShortcutEvent;
-use crate::compositor::shortcut::Shortcut;
 
+use cosmic_comp_config::NumlockState;
 use cosmic_comp_config::input::{
     AccelConfig, AccelProfile, ClickMethod, ScrollConfig, ScrollMethod, TapConfig,
 };
-use cosmic_comp_config::NumlockState;
 
 #[derive(Debug, Default)]
 pub struct Sway {
@@ -127,22 +127,30 @@ impl Sway {
     fn format_binding(binding: &cosmic_settings_config::shortcuts::Binding) -> String {
         let mut parts = Vec::new();
         let mods = &binding.modifiers;
-        if mods.logo { parts.push("Mod4".to_string()); }
-        if mods.alt { parts.push("Mod1".to_string()); }
-        if mods.shift { parts.push("Shift".to_string()); }
-        if mods.ctrl { parts.push("Ctrl".to_string()); }
-        
-        if let Some(ref k) = binding.key {
-             parts.push(xkbcommon::xkb::keysym_get_name(*k));
-        } else if let Some(code) = binding.keycode {
-             parts.push(code.to_string());
+        if mods.logo {
+            parts.push("Mod4".to_string());
         }
-        
+        if mods.alt {
+            parts.push("Mod1".to_string());
+        }
+        if mods.shift {
+            parts.push("Shift".to_string());
+        }
+        if mods.ctrl {
+            parts.push("Ctrl".to_string());
+        }
+
+        if let Some(ref k) = binding.key {
+            parts.push(xkbcommon::xkb::keysym_get_name(*k));
+        } else if let Some(code) = binding.keycode {
+            parts.push(code.to_string());
+        }
+
         parts.join("+")
     }
 
     fn format_action(action: &crate::event::shortcuts::Shortcut) -> String {
-        use crate::event::shortcuts::{Shortcut, Direction, FocusDirection, SystemAction};
+        use crate::event::shortcuts::{Direction, FocusDirection, Shortcut, SystemAction};
 
         match action {
             Shortcut::Close => "kill".to_string(),
@@ -154,7 +162,7 @@ impl Sway {
             Shortcut::Move(Direction::Right) => "move right".to_string(),
             Shortcut::Move(Direction::Up) => "move up".to_string(),
             Shortcut::Move(Direction::Down) => "move down".to_string(),
-            Shortcut::Workspace(_) => String::new(), 
+            Shortcut::Workspace(_) => String::new(),
             Shortcut::MoveToWorkspace(id) => format!("move container to workspace {}", id),
             Shortcut::Terminate => "exec swaymsg exit".to_string(),
             Shortcut::Custom(cmd) => format!("exec {}", cmd),
@@ -167,10 +175,16 @@ impl Sway {
                 SystemAction::Screenshot => "exec cosmic-screenshot".to_string(),
                 SystemAction::BrightnessDown => "exec brightnessctl s 5%-".to_string(),
                 SystemAction::BrightnessUp => "exec brightnessctl s +5%".to_string(),
-                SystemAction::VolumeLower => "exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-".to_string(),
-                SystemAction::VolumeRaise => "exec wpctl set-volume -l 1.5 @DEFAULT_AUDIO_SINK@ 5%+".to_string(),
+                SystemAction::VolumeLower => {
+                    "exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-".to_string()
+                }
+                SystemAction::VolumeRaise => {
+                    "exec wpctl set-volume -l 1.5 @DEFAULT_AUDIO_SINK@ 5%+".to_string()
+                }
                 SystemAction::Mute => "exec wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle".to_string(),
-                SystemAction::MuteMic => "exec wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle".to_string(),
+                SystemAction::MuteMic => {
+                    "exec wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle".to_string()
+                }
                 SystemAction::PlayPause => "exec playerctl play-pause".to_string(),
                 SystemAction::PlayNext => "exec playerctl next".to_string(),
                 SystemAction::PlayPrev => "exec playerctl previous".to_string(),
@@ -186,7 +200,11 @@ impl Sway {
 }
 
 impl Shortcut for Sway {
-    fn add_shortcut(&self, shortcut: crate::event::shortcuts::Shortcut, binding: cosmic_settings_config::shortcuts::Binding) -> CompositorResult {
+    fn add_shortcut(
+        &self,
+        shortcut: crate::event::shortcuts::Shortcut,
+        binding: cosmic_settings_config::shortcuts::Binding,
+    ) -> CompositorResult {
         let keys = Self::format_binding(&binding);
         let cmd = Self::format_action(&shortcut);
         if !keys.is_empty() && !cmd.is_empty() {
@@ -195,7 +213,11 @@ impl Shortcut for Sway {
         Ok(())
     }
 
-    fn remove_shortcut(&self, _shortcut: crate::event::shortcuts::Shortcut, binding: cosmic_settings_config::shortcuts::Binding) -> CompositorResult {
+    fn remove_shortcut(
+        &self,
+        _shortcut: crate::event::shortcuts::Shortcut,
+        binding: cosmic_settings_config::shortcuts::Binding,
+    ) -> CompositorResult {
         let keys = Self::format_binding(&binding);
         if !keys.is_empty() {
             self.run_command(format!("unbindsym {}", keys))?;
@@ -280,8 +302,12 @@ impl Input for Sway {
 
     fn numslock_state(&self, state: NumlockState) -> InputResult {
         match state {
-            NumlockState::BootOn => self.run_command("input type:keyboard xkb_numlock enabled".to_string()),
-            NumlockState::BootOff => self.run_command("input type:keyboard xkb_numlock disabled".to_string()),
+            NumlockState::BootOn => {
+                self.run_command("input type:keyboard xkb_numlock enabled".to_string())
+            }
+            NumlockState::BootOff => {
+                self.run_command("input type:keyboard xkb_numlock disabled".to_string())
+            }
             NumlockState::LastBoot => Ok(()), // Don't change
         }
     }

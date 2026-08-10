@@ -1,5 +1,5 @@
-use gio::prelude::*;
 use gio::Settings;
+use gio::prelude::*;
 use std::error::Error;
 
 struct GnomeConfig {
