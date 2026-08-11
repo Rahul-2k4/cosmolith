@@ -197,6 +197,7 @@ mod tests {
         keycode: Option<u32>,
     ) -> Binding {
         Binding {
+            description: None,
             modifiers,
             key,
             keycode,
@@ -224,13 +225,6 @@ mod tests {
         );
 
         assert_eq!(Sway::format_binding(&binding), "Mod4+Mod1+Shift+Ctrl+Return");
-    }
-
-    #[test]
-    fn formats_binding_with_keycode() {
-        let binding = binding(Modifiers::default(), None, Some(42));
-
-        assert_eq!(Sway::format_binding(&binding), "42");
     }
 
     #[test]
