@@ -185,6 +185,76 @@ impl Sway {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::Sway;
+    use crate::event::shortcuts::{Direction, FocusDirection, Shortcut};
+    use cosmic_settings_config::shortcuts::{Binding, Modifiers};
+
+    fn binding(
+        modifiers: Modifiers,
+        key: Option<xkbcommon::xkb::Keysym>,
+        keycode: Option<u32>,
+    ) -> Binding {
+        Binding {
+            modifiers,
+            key,
+            keycode,
+        }
+    }
+
+    #[test]
+    fn normalizes_keyboard_options() {
+        assert_eq!(Sway::normalize_kb_options("  , ctrl:nocaps, ,compose:ralt, "), "ctrl:nocaps,compose:ralt");
+        assert_eq!(Sway::normalize_kb_options(" , , "), "");
+    }
+
+    #[test]
+    fn formats_binding_with_modifiers_and_key() {
+        let modifiers = Modifiers {
+            logo: true,
+            alt: true,
+            shift: true,
+            ctrl: true,
+        };
+        let binding = binding(
+            modifiers,
+            Some(xkbcommon::xkb::keysym_from_name("Return", 0)),
+            None,
+        );
+
+        assert_eq!(Sway::format_binding(&binding), "Mod4+Mod1+Shift+Ctrl+Return");
+    }
+
+    #[test]
+    fn formats_binding_with_keycode() {
+        let binding = binding(Modifiers::default(), None, Some(42));
+
+        assert_eq!(Sway::format_binding(&binding), "42");
+    }
+
+    #[test]
+    fn formats_retained_workflow_actions() {
+        assert_eq!(Sway::format_action(&Shortcut::Close), "kill");
+        assert_eq!(
+            Sway::format_action(&Shortcut::Focus(FocusDirection::Right)),
+            "focus right"
+        );
+        assert_eq!(
+            Sway::format_action(&Shortcut::Move(Direction::Down)),
+            "move down"
+        );
+        assert_eq!(
+            Sway::format_action(&Shortcut::MoveToWorkspace("3".into())),
+            "move container to workspace 3"
+        );
+        assert_eq!(
+            Sway::format_action(&Shortcut::Custom("notify-send ready".into())),
+            "exec notify-send ready"
+        );
+    }
+}
+
 impl Shortcut for Sway {
     fn add_shortcut(&self, shortcut: crate::event::shortcuts::Shortcut, binding: cosmic_settings_config::shortcuts::Binding) -> CompositorResult {
         let keys = Self::format_binding(&binding);
