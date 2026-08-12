@@ -1,5 +1,7 @@
 #!/usr/bin/make -f
 
+export PATH := /home/rahul/.cargo/bin:$(PATH)
+
 export CARGO_HOME = $(CURDIR)/debian/.cargo
 export CARGO_TERM_COLOR = never
 export CARGO_BUILD_JOBS ?= $(shell nproc)
