@@ -19,6 +19,8 @@ use identifier::get_current_session;
 mod compositor;
 use compositor::init_compositor;
 
+mod persistence;
+
 use watcher::shortcuts::start_shortcuts_watcher;
 
 fn main() -> Result<(), Box<dyn StdError>> {
@@ -38,7 +40,18 @@ fn main() -> Result<(), Box<dyn StdError>> {
     println!("You are currently running: {:?}", session);
 
     let compositor = init_compositor(session);
-    if compositor.is_none() {
+    if let Some(ref comp) = compositor {
+        // Restore any settings persisted to generated-config.d from a
+        // previous cosmolith/Sway run, so a cosmolith restart doesn't lose
+        // state that hasn't been re-emitted by cosmic-config yet.
+        match comp.replay_persisted_config() {
+            Ok(count) if count > 0 => {
+                println!("Replayed {count} persisted setting(s) from generated-config.d");
+            }
+            Ok(_) => {}
+            Err(err) => eprintln!("Failed to replay persisted generated-config.d settings: {err}"),
+        }
+    } else {
         eprintln!("No supported compositor detected. Events will be logged only.");
     }
 

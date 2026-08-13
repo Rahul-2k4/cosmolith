@@ -30,6 +30,14 @@ pub trait Compositor {
 
     /// Optional shutdown/cleanup hook.
     fn shutdown(&self) -> CompositorResult;
+
+    /// Replay any settings persisted to `generated-config.d` from a prior
+    /// run, merging them back into the live runtime config. Returns the
+    /// number of directives replayed. Compositors that don't support (or
+    /// don't need) this persistence contract can rely on the default no-op.
+    fn replay_persisted_config(&self) -> Result<usize, Box<dyn Error + Send + Sync>> {
+        Ok(0)
+    }
 }
 
 pub fn init_compositor(desktop: crate::identifier::Desktop) -> Option<Box<dyn Compositor>> {

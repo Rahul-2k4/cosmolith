@@ -9,6 +9,7 @@ use crate::event::Event;
 use crate::event::input::InputEvent;
 use crate::event::shortcuts::ShortcutEvent;
 use crate::compositor::shortcut::Shortcut;
+use crate::persistence;
 
 use cosmic_comp_config::input::{
     AccelConfig, AccelProfile, ClickMethod, ScrollConfig, ScrollMethod, TapConfig,
@@ -62,6 +63,15 @@ impl Sway {
     }
 
     fn run_command(&self, cmd: String) -> InputResult {
+        // Persist `input <target> <setting> <value>` directives to
+        // generated-config.d so they survive a Sway restart/reboot even if
+        // cosmolith isn't running to replay them (see `src/persistence.rs`).
+        // Non-`input` commands (e.g. `bindsym`) are ignored by
+        // `record_input_line` and are not written here.
+        if let Err(err) = persistence::record_input_line(&cmd) {
+            eprintln!("Failed to persist generated-config.d directive: {err}");
+        }
+
         let mut guard = self.connection.lock().map_err(|_| {
             std::io::Error::new(std::io::ErrorKind::Other, "Sway connection lock poisoned")
         })?;
@@ -240,6 +250,19 @@ impl Compositor for Sway {
 
     fn shutdown(&self) -> CompositorResult {
         Ok(())
+    }
+
+    fn replay_persisted_config(&self) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+        // Re-apply every directive saved under generated-config.d over the
+        // live Sway IPC connection. This is the "restart merges persisted
+        // settings into runtime config" half of the persistence contract;
+        // Sway's own `include .../generated-config.d/*` line covers the
+        // case where Sway itself restarts without cosmolith.
+        let count = persistence::replay_into(|line| {
+            self.run_command(line.to_string())
+                .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err.to_string()))
+        })?;
+        Ok(count)
     }
 }
 
