@@ -142,22 +142,27 @@ pub fn replay_into(mut apply: impl FnMut(&str) -> io::Result<()>) -> io::Result<
     Ok(count)
 }
 
+// Test-only helper shared with other modules (e.g. `compositor::sway`) that
+// need to isolate `XDG_CONFIG_HOME` while asserting what got written to
+// `generated-config.d`. Kept `pub(crate)` (rather than private to `mod
+// tests` below) specifically so those other modules' tests serialize on the
+// same lock instead of racing on the same process-global env var.
 #[cfg(test)]
-mod tests {
-    use super::*;
+pub(crate) mod test_support {
+    use std::path::PathBuf;
     use std::sync::Mutex;
 
     // `XDG_CONFIG_HOME` is process-global state; serialize tests that touch
     // it so they can't interleave.
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
-    struct TempConfigHome {
-        path: PathBuf,
+    pub(crate) struct TempConfigHome {
+        pub(crate) path: PathBuf,
         _guard: std::sync::MutexGuard<'static, ()>,
     }
 
     impl TempConfigHome {
-        fn new() -> Self {
+        pub(crate) fn new() -> Self {
             let guard = ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
             let path = std::env::temp_dir().join(format!(
                 "cosmolith-generated-config-test-{}-{}",
@@ -180,9 +185,15 @@ mod tests {
     impl Drop for TempConfigHome {
         fn drop(&mut self) {
             unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
-            let _ = fs::remove_dir_all(&self.path);
+            let _ = std::fs::remove_dir_all(&self.path);
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::test_support::TempConfigHome;
+    use super::*;
 
     #[test]
     fn generated_config_dir_matches_committed_proposal_path() {

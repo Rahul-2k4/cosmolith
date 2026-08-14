@@ -532,3 +532,55 @@ impl Input for Sway {
     //     Ok(())
     // }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::persistence;
+    use crate::persistence::test_support::TempConfigHome;
+
+    // Task: verify keyboard layout/variant persistence is not a separate,
+    // missing code path from the generic `generated-config.d` persistence
+    // added in `src/persistence.rs`. `Sway::keyboard_layout` /
+    // `Sway::keyboard_variant` are implemented purely in terms of
+    // `run_command`, exactly like every other `input <target> <setting>
+    // <value>` directive (touchpad/mouse), and `run_command` persists via
+    // `persistence::record_input_line` unconditionally before it ever
+    // touches the (possibly absent) live Sway IPC socket. So no
+    // keyboard-specific wiring is needed: these two assertions are the
+    // targeted proof, not a bug fix.
+    #[test]
+    fn keyboard_layout_change_persists_through_generic_input_directive_path() {
+        let _home = TempConfigHome::new();
+        let sway = Sway::new();
+
+        // No live Sway socket is available in this test process, so the
+        // IPC half of `run_command` necessarily errors out - but the
+        // persistence write happens first and unconditionally.
+        let _ = sway.keyboard_layout("us,fr".to_string());
+
+        let lines = persistence::load_input_lines().unwrap();
+        assert_eq!(
+            lines,
+            vec!["input type:keyboard xkb_layout us,fr".to_string()],
+            "keyboard layout change was not persisted through the generic \
+             generated-config.d input-directive path"
+        );
+    }
+
+    #[test]
+    fn keyboard_variant_change_persists_through_generic_input_directive_path() {
+        let _home = TempConfigHome::new();
+        let sway = Sway::new();
+
+        let _ = sway.keyboard_variant("intl,oss".to_string());
+
+        let lines = persistence::load_input_lines().unwrap();
+        assert_eq!(
+            lines,
+            vec!["input type:keyboard xkb_variant intl,oss".to_string()],
+            "keyboard variant change was not persisted through the generic \
+             generated-config.d input-directive path"
+        );
+    }
+}
