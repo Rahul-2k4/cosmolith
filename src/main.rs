@@ -6,10 +6,10 @@ use std::{
     time::Duration,
 };
 
-mod watcher;
 mod error;
-use watcher::input::{send_initial_input_events, start_input_watcher};
+mod watcher;
 use crate::error::Error;
+use watcher::input::{send_initial_input_events, start_input_watcher};
 mod event;
 use event::Event;
 
@@ -19,8 +19,8 @@ use identifier::get_current_session;
 mod compositor;
 use compositor::init_compositor;
 
-mod persistence;
 mod display_persistence;
+mod persistence;
 
 use watcher::shortcuts::start_shortcuts_watcher;
 
@@ -57,7 +57,7 @@ fn main() -> Result<(), Box<dyn StdError>> {
         eprintln!("No supported compositor detected. Events will be logged only.");
     }
 
-    let _display_watcher = if is_sway {
+    let _display_watcher = if is_sway && compositor.is_some() {
         Some(display_persistence::start_output_watcher(
             display_persistence::config_path(),
         ))

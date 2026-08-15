@@ -169,12 +169,11 @@ fn run_subscription(path: &Path) -> Result<(), String> {
 fn consume_events<I, F>(events: I, mut snapshot: F) -> Result<(), String>
 where
     I: IntoIterator<Item = Result<bool, String>>,
-    F: FnMut(),
+    F: FnMut() -> Result<(), String>,
 {
-    snapshot();
     for event in events {
         match event {
-            Ok(true) => snapshot(),
+            Ok(true) => snapshot()?,
             Ok(false) => {}
             Err(error) => return Err(error),
         }
@@ -182,8 +181,8 @@ where
     Err("Sway output event stream ended".into())
 }
 
-fn persist_current(path: &Path) {
-    let result = Connection::new()
+fn persist_current(path: &Path) -> Result<(), String> {
+    Connection::new()
         .and_then(|mut connection| connection.get_outputs())
         .map_err(io::Error::other)
         .and_then(|outputs| {
@@ -192,10 +191,8 @@ fn persist_current(path: &Path) {
                 &outputs.iter().map(from_sway_output).collect::<Vec<_>>(),
             )
             .map(|_| ())
-        });
-    if let Err(error) = result {
-        eprintln!("Failed to persist Sway output profile: {error}");
-    }
+        })
+        .map_err(|error| error.to_string())
 }
 
 fn escape(value: &str) -> String {
@@ -275,10 +272,28 @@ mod tests {
     }
 
     #[test]
-    fn snapshots_on_start_and_output_events_only() {
-        let events = [Ok(false), Ok(true), Err("transient".into()), Ok(true)];
+    fn snapshots_once_per_output_event_without_startup_snapshot() {
+        let events = [
+            Ok(false),
+            Ok(true),
+            Ok(false),
+            Ok(true),
+            Err("transient".into()),
+        ];
         let mut snapshots = 0;
-        assert!(consume_events(events, || snapshots += 1).is_err());
+        assert!(
+            consume_events(events, || {
+                snapshots += 1;
+                Ok(())
+            })
+            .is_err()
+        );
         assert_eq!(snapshots, 2);
+    }
+
+    #[test]
+    fn surfaces_snapshot_errors_to_subscription_loop() {
+        let error = consume_events([Ok(true)], || Err("persist failed".into())).unwrap_err();
+        assert_eq!(error, "persist failed");
     }
 }
