@@ -20,6 +20,7 @@ mod compositor;
 use compositor::init_compositor;
 
 mod persistence;
+mod display_persistence;
 
 use watcher::shortcuts::start_shortcuts_watcher;
 
@@ -39,6 +40,7 @@ fn main() -> Result<(), Box<dyn StdError>> {
     let session = get_current_session();
     println!("You are currently running: {:?}", session);
 
+    let is_sway = matches!(session, identifier::Desktop::Sway);
     let compositor = init_compositor(session);
     if let Some(ref comp) = compositor {
         // Restore any settings persisted to generated-config.d from a
@@ -54,6 +56,14 @@ fn main() -> Result<(), Box<dyn StdError>> {
     } else {
         eprintln!("No supported compositor detected. Events will be logged only.");
     }
+
+    let _display_watcher = if is_sway {
+        Some(display_persistence::start_output_watcher(
+            display_persistence::config_path(),
+        ))
+    } else {
+        None
+    };
 
     loop {
         match rx.recv_timeout(Duration::from_secs(5)) {
