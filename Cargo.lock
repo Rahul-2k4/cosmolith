@@ -251,7 +251,7 @@ dependencies = [
 [[package]]
 name = "build_helpers"
 version = "0.14.0"
-source = "git+https://github.com/pop-os/libcosmic#030a7dbe02dea922a782aa7606d5057b8d1b5be3"
+source = "git+https://github.com/Rahul-2k4/libcosmic?rev=fba8b7d92e02b0b9fbc230ad048ab820a5ec4e8b#fba8b7d92e02b0b9fbc230ad048ab820a5ec4e8b"
 dependencies = [
  "cfg_aliases",
 ]
@@ -429,7 +429,7 @@ dependencies = [
 [[package]]
 name = "cosmic-config"
 version = "1.0.0"
-source = "git+https://github.com/pop-os/libcosmic#030a7dbe02dea922a782aa7606d5057b8d1b5be3"
+source = "git+https://github.com/Rahul-2k4/libcosmic?rev=fba8b7d92e02b0b9fbc230ad048ab820a5ec4e8b#fba8b7d92e02b0b9fbc230ad048ab820a5ec4e8b"
 dependencies = [
  "atomicwrites",
  "cosmic-config-derive",
@@ -446,7 +446,7 @@ dependencies = [
 [[package]]
 name = "cosmic-config-derive"
 version = "1.0.0"
-source = "git+https://github.com/pop-os/libcosmic#030a7dbe02dea922a782aa7606d5057b8d1b5be3"
+source = "git+https://github.com/Rahul-2k4/libcosmic?rev=fba8b7d92e02b0b9fbc230ad048ab820a5ec4e8b#fba8b7d92e02b0b9fbc230ad048ab820a5ec4e8b"
 dependencies = [
  "quote",
  "syn 2.0.119",
@@ -1033,7 +1033,7 @@ dependencies = [
 [[package]]
 name = "iced_core"
 version = "0.14.0"
-source = "git+https://github.com/pop-os/libcosmic#030a7dbe02dea922a782aa7606d5057b8d1b5be3"
+source = "git+https://github.com/Rahul-2k4/libcosmic?rev=fba8b7d92e02b0b9fbc230ad048ab820a5ec4e8b#fba8b7d92e02b0b9fbc230ad048ab820a5ec4e8b"
 dependencies = [
  "bitflags",
  "build_helpers",
@@ -1057,7 +1057,7 @@ dependencies = [
 [[package]]
 name = "iced_futures"
 version = "0.14.0"
-source = "git+https://github.com/pop-os/libcosmic#030a7dbe02dea922a782aa7606d5057b8d1b5be3"
+source = "git+https://github.com/Rahul-2k4/libcosmic?rev=fba8b7d92e02b0b9fbc230ad048ab820a5ec4e8b#fba8b7d92e02b0b9fbc230ad048ab820a5ec4e8b"
 dependencies = [
  "futures",
  "iced_core",
