@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-cosmic-config = { git = "https://github.com/Rahul-2k4/libcosmic", rev = "fba8b7d92e02b0b9fbc230ad048ab820a5ec4e8b" }
+cosmic-config = { git = "https://github.com/Rahul-2k4/libcosmic", rev = "6183239ada3e17741e40ac9bf3597b1f35256ed7" }
 cosmic-comp-config = { git = "https://github.com/pop-os/cosmic-comp", rev = "0553e857c3d3dcd049395f43bf211a989715610e" }
 hyprland = { git = "https://github.com/hyprland-community/hyprland-rs", branch = "master", features = ["keyword"] }
 thiserror = "2.0.18"
@@ -15,4 +15,4 @@ cosmic-settings-config = { git = "https://github.com/pop-os/cosmic-settings-daem
 xkbcommon = "0.7.0"
 
 [patch."https://github.com/pop-os/libcosmic"]
-cosmic-config = { git = "https://github.com/Rahul-2k4/libcosmic", rev = "fba8b7d92e02b0b9fbc230ad048ab820a5ec4e8b" }
+cosmic-config = { git = "https://github.com/Rahul-2k4/libcosmic", rev = "6183239ada3e17741e40ac9bf3597b1f35256ed7" }
