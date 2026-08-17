@@ -2,28 +2,28 @@
 
 use std::{error::Error as StdError, sync::mpsc::Sender};
 
-use cosmic_comp_config::{XkbConfig, KeyboardConfig};
 use cosmic_comp_config::input::InputConfig;
+use cosmic_comp_config::{KeyboardConfig, XkbConfig};
 use cosmic_config::{Config, ConfigGet};
 
-use crate::event::{
-    Event,
-    input::{KeyboardEvent, MouseEvent, TouchpadEvent},
-};
 use crate::error::Error;
+use crate::event::{
+    input::{KeyboardEvent, MouseEvent, TouchpadEvent},
+    Event,
+};
 use std::sync::{Arc, Mutex};
 
 // #todo : Find all the keys linked to  com.system76.CosmicComp and catch those and read events
 // implemented
 // 1. input_touchpad
 // 2. input_default
-// 3. xkb_config 
-// 4. keyboard_config 
+// 3. xkb_config
+// 4. keyboard_config
 // to be implemented
 // 5. workspaces
 // 6. pinned_workspaces
 // 7. input_touchpad_override
-// 8. input_devices 
+// 8. input_devices
 // 9. autotile
 // 10. autotile_behaviour
 // 11. active_hint
@@ -94,11 +94,11 @@ pub fn start_input_watcher(
     }));
 
     // Keep the watcher alive for the lifetime of the program.
-    let watcher = config.watch({
-        let tx = Arc::clone(&tx);
-        let state = Arc::clone(&state);
-        move |cfg: &Config, keys| {
-            match tx.lock() {
+    let watcher = config
+        .watch({
+            let tx = Arc::clone(&tx);
+            let state = Arc::clone(&state);
+            move |cfg: &Config, keys| match tx.lock() {
                 Ok(sender) => match state.lock() {
                     Ok(mut state) => {
                         for event in state.from(cfg, keys) {
@@ -111,9 +111,8 @@ pub fn start_input_watcher(
                 },
                 Err(_) => eprintln!("{}", Error::channel_lock("input")),
             }
-        }
-    })
-    .map_err(|source| Error::watcher_setup("input", source))?;
+        })
+        .map_err(|source| Error::watcher_setup("input", source))?;
 
     Ok(Box::new(watcher))
 }
@@ -130,10 +129,7 @@ impl InputState {
                         }
                         self.touchpad = Some(new_config);
                     }
-                    Err(source) => eprintln!(
-                        "{}",
-                        Error::config_read(INPUTNAMESPACE, key, source)
-                    ),
+                    Err(source) => eprintln!("{}", Error::config_read(INPUTNAMESPACE, key, source)),
                 },
                 "input_default" => match cfg.get::<InputConfig>(key) {
                     Ok(new_config) => {
@@ -142,35 +138,28 @@ impl InputState {
                         }
                         self.mouse = Some(new_config);
                     }
-                    Err(source) => eprintln!(
-                        "{}",
-                        Error::config_read(INPUTNAMESPACE, key, source)
-                    ),
+                    Err(source) => eprintln!("{}", Error::config_read(INPUTNAMESPACE, key, source)),
                 },
                 "xkb_config" => match cfg.get::<XkbConfig>(key) {
                     Ok(new_config) => {
-                        if let Some(old) = self.keyboard.clone() {
-                            events.extend(KeyboardEvent::from(old, new_config.clone()));
-                        }
+                        let old = self.keyboard.clone().unwrap_or_default();
+                        events.extend(KeyboardEvent::from(old, new_config.clone()));
                         self.keyboard = Some(new_config);
                     }
-                    Err(source) => eprintln!(
-                        "{}",
-                        Error::config_read(INPUTNAMESPACE, key, source)
-                    ),
+                    Err(source) => eprintln!("{}", Error::config_read(INPUTNAMESPACE, key, source)),
                 },
                 "keyboard_config" => match cfg.get::<KeyboardConfig>(key) {
                     Ok(new_config) => {
                         if let Some(old) = self.numslock.clone() {
-                            events.extend(KeyboardEvent::from_keyboard_config(old, new_config.clone()));
+                            events.extend(KeyboardEvent::from_keyboard_config(
+                                old,
+                                new_config.clone(),
+                            ));
                         }
                         self.numslock = Some(new_config);
                     }
-                    Err(source) => eprintln!(
-                        "{}",
-                        Error::config_read(INPUTNAMESPACE, key, source)
-                    ),
-                }
+                    Err(source) => eprintln!("{}", Error::config_read(INPUTNAMESPACE, key, source)),
+                },
                 x => {
                     eprintln!(
                         "Unknown key found in Input (com.system76.CosmicComp): {}",
@@ -185,12 +174,95 @@ impl InputState {
 
 #[cfg(test)]
 mod tests {
-    use super::startup_keyboard_events;
+    use super::{startup_keyboard_events, InputState};
     use crate::event::{
         input::{InputEvent, KeyboardEvent},
         Event,
     };
     use cosmic_comp_config::XkbConfig;
+    use cosmic_config::{Config, ConfigSet};
+
+    fn config_with_xkb(xkb: XkbConfig) -> Config {
+        static NEXT_ID: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let id = NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let path =
+            std::env::temp_dir().join(format!("cosmolith-input-test-{}-{id}", std::process::id()));
+        let config = Config::with_custom_path("com.system76.CosmicComp", 1, path).unwrap();
+        config.set("xkb_config", xkb).unwrap();
+        config
+    }
+
+    fn keyboard_events(events: &[Event]) -> Vec<&KeyboardEvent> {
+        events
+            .iter()
+            .filter_map(|event| match event {
+                Event::Input(InputEvent::Keyboard(event)) => Some(event),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn input_watcher_reads_single_layout_from_xkb_config() {
+        let config = config_with_xkb(XkbConfig {
+            layout: "us".into(),
+            ..XkbConfig::default()
+        });
+        let mut state = InputState {
+            touchpad: None,
+            mouse: None,
+            keyboard: None,
+            numslock: None,
+        };
+        let events = state.from(&config, &["xkb_config".into()]);
+        assert!(keyboard_events(&events).contains(&&KeyboardEvent::Layout("us".into())));
+    }
+
+    #[test]
+    fn input_watcher_emits_variant_only_change() {
+        let config = config_with_xkb(XkbConfig {
+            layout: "us".into(),
+            variant: "intl".into(),
+            ..XkbConfig::default()
+        });
+        let mut state = InputState {
+            touchpad: None,
+            mouse: None,
+            keyboard: Some(XkbConfig {
+                layout: "us".into(),
+                ..XkbConfig::default()
+            }),
+            numslock: None,
+        };
+        let events = state.from(&config, &["xkb_config".into()]);
+        assert_eq!(
+            keyboard_events(&events),
+            vec![&KeyboardEvent::Variant("intl".into())]
+        );
+    }
+
+    #[test]
+    fn input_watcher_preserves_multi_layout_and_variant_values() {
+        let config = config_with_xkb(XkbConfig {
+            layout: "us,fr".into(),
+            variant: "intl,oss".into(),
+            ..XkbConfig::default()
+        });
+        let mut state = InputState {
+            touchpad: None,
+            mouse: None,
+            keyboard: None,
+            numslock: None,
+        };
+        let events = state.from(&config, &["xkb_config".into()]);
+        assert_eq!(
+            keyboard_events(&events),
+            vec![
+                &KeyboardEvent::Layout("us,fr".into()),
+                &KeyboardEvent::Variant("intl,oss".into()),
+            ]
+        );
+    }
 
     #[test]
     fn keyboard_event_conversion_emits_variant_only_change() {
