@@ -74,6 +74,21 @@ mod tests {
         assert!(matches!(get_current_session(), Desktop::Sway));
     }
 
+    #[test]
+    fn desktop_tokens_match_sway_without_substring_false_positives() {
+        let _lock = environment_test_lock();
+        let _guard = EnvGuard::clear();
+
+        unsafe { env::set_var("XDG_CURRENT_DESKTOP", "Not-Sway") };
+        assert!(matches!(get_current_session(), Desktop::Unknown(_)));
+
+        unsafe { env::set_var("XDG_CURRENT_DESKTOP", "Sway") };
+        assert!(matches!(get_current_session(), Desktop::Sway));
+
+        unsafe { env::set_var("XDG_CURRENT_DESKTOP", "COSMIC:Sway") };
+        assert!(matches!(get_current_session(), Desktop::Sway));
+    }
+
     fn environment_test_lock() -> MutexGuard<'static, ()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         LOCK.get_or_init(|| Mutex::new(()))
@@ -146,29 +161,28 @@ pub fn get_current_session() -> Desktop {
     ];
 
     for value in candidates.into_iter().flatten() {
-        let lower = value.to_lowercase();
-        if lower.contains("cosmic") && lower.contains("sway") {
+        if has_desktop_token(&value, "cosmic") && has_desktop_token(&value, "sway") {
             return Desktop::Sway;
         }
-        if lower.contains("hyprland") {
+        if has_desktop_token(&value, "hyprland") {
             return Desktop::Hyprland;
         }
-        if lower.contains("sway") {
+        if has_desktop_token(&value, "sway") {
             return Desktop::Sway;
         }
-        if lower.contains("gnome") {
+        if has_desktop_token(&value, "gnome") {
             return Desktop::Gnome;
         }
-        if lower.contains("kde") {
+        if has_desktop_token(&value, "kde") {
             return Desktop::Kde;
         }
-        if lower.contains("plasma") {
+        if has_desktop_token(&value, "plasma") {
             return Desktop::Plasma;
         }
-        if lower.contains("xfce") {
+        if has_desktop_token(&value, "xfce") {
             return Desktop::Xfce;
         }
-        if lower.contains("cosmic") {
+        if has_desktop_token(&value, "cosmic") {
             return Desktop::Cosmic;
         }
     }
@@ -181,6 +195,12 @@ pub fn get_current_session() -> Desktop {
     }
 
     Desktop::Unknown("Not Detected".into())
+}
+
+fn has_desktop_token(value: &str, expected: &str) -> bool {
+    value
+        .split(':')
+        .any(|token| token.eq_ignore_ascii_case(expected))
 }
 
 fn non_empty_env(name: &str) -> Option<String> {
